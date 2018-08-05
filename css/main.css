@@ -1,0 +1,63 @@
+td {
+    height: 35px;
+    width: 35px;
+    background: #96a3cb;
+    border: 2px outset white;
+    color: rgb(150, 163, 203);
+}
+
+td:active {
+    border: 2px inset white;
+}
+
+.field table {
+    margin: auto;
+}
+
+.top {
+    color: white;
+    height: 120px;
+    text-align: center;
+}
+
+.bottom {
+    text-align: center;
+    width: 300px;
+    margin: 0 auto;
+    color: white;
+}
+
+.bottom form {
+    height: 80px;
+}
+
+.bottom form input {
+    margin-left: 10px;
+}
+
+.bottom form button {
+    margin-left: 10px;
+}
+
+.boom {
+    background-color: crimson;
+}
+
+.open {
+    background: #d3ff75;
+    color: rgb(0, 0, 0);
+}
+
+.hide_identifier {
+    display: none;
+}
+
+.error {
+    margin-top: 15px;
+    height: 20px;
+    color: crimson;
+}
+
+.game {
+    background-color: rgb(52, 58, 64);
+}
