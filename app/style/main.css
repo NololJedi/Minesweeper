@@ -48,10 +48,6 @@ td:active {
     color: rgb(0, 0, 0);
 }
 
-.hide_identifier {
-    display: none;
-}
-
 .error {
     margin-top: 15px;
     height: 20px;

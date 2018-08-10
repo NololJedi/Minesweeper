@@ -1,75 +1,49 @@
-'use strict';
+import './style/app.scss';
+import jQuery from "jquery";
+import flag_for_bomb from './flag.svg';
+import Timer from './Timer';
 
-/*Global constants*/
-const DEFAULT_FIELD_SIZE = 8;
-const FIELD_INDEX = 5;
-const DEFAULT_BOMBS_COUNT = 10;
-const MIN_BOMBS_COUNT = 10;
-const MAX_BOMBS_COUNT = 250;
-
-//Classes
-const BOMB_IDENTIFIER = "bomb";
-const BOOM_IDENTIFIER = "boom";
-const BOMB_FLAGGED = "flag";
-const CELL_OPEN = "open";
-const HIDE_IDENTIFIER = "hide_identifier";
-const FIRST_CLICK_FLAG = "firstClick";
-
-//Resources
-const FLAG_SVG_PATH = "flag.svg";
-const RELOAD_GAME = "Reload";
-
-//Messages
-const GAME_OVER_FAIL = "Booom!!! You lost. Bombs remaining: ";
-const GAME_OVER_SUCCESS = "Congratulations! All bombs were defused.";
-const BOMBS_COUNT_NOT_VALID_TOO_MUCH = "Too much bombs.";
-const BOMBS_COUNT_NOT_VALID_NOT_ENOUGH = "Not enough bombs.";
-const GAME_IN_PROCESS = "Game is in process.";
-
-/*Utils functions*/
-function calculateFiledSize(bombsCount) {
-    if (bombsCount === DEFAULT_BOMBS_COUNT || bombsCount < DEFAULT_BOMBS_COUNT) {
-        return DEFAULT_FIELD_SIZE;
-    }
-
-    let index = Math.round(bombsCount / 10) * 10;
-
-    if (index === DEFAULT_BOMBS_COUNT) {
-        return DEFAULT_FIELD_SIZE;
-    } else {
-        index = index / DEFAULT_BOMBS_COUNT;
-
-        return DEFAULT_FIELD_SIZE + index + FIELD_INDEX;
-    }
-}
-
-function getRandomInt(max) {
-    let number = Math.floor(Math.random() * Math.floor(max));
-
-    if (number === max) {
-        return getRandomInt(max);
-    }
-
-    return number;
-}
+window.$ = window.jQuery = jQuery;
 
 /*Main game loop*/
 $(function () {
+        'use strict';
+        /*Global constants*/
+        const DEFAULT_FIELD_SIZE = 8;
+        const FIELD_INDEX = 5;
+        const DEFAULT_BOMBS_COUNT = 10;
+        const MIN_BOMBS_COUNT = 10;
+        const MAX_BOMBS_COUNT = 250;
+        //Classes
+        const BOMB_FLAGGED = "flag";
+        const CELL_OPEN = "open";
+        const BOOM_IDENTIFIER = "boom";
+        const FIRST_CLICK_FLAG = "firstClick";
+        const BOMB_COUNTER = "count";
+        //Resources
+        const FLAG_SVG_PATH = flag_for_bomb;
+        const RELOAD_GAME = "Reload";
+        //Messages
+        const GAME_OVER_FAIL = "Booom!!! You lost. Bombs remaining: ";
+        const GAME_OVER_SUCCESS = "Congratulations! All bombs were defused.";
+        const BOMBS_COUNT_NOT_VALID_TOO_MUCH = "Too much bombs.";
+        const BOMBS_COUNT_NOT_VALID_NOT_ENOUGH = "Not enough bombs.";
+        const GAME_IN_PROCESS = "Game is in process.";
+
         /*Variables*/
         let field = $('#field');
-        let viewer = $('#viewer');
         let result = $('#result');
         let bombsCountHolder = $('#bombs');
         let startButton = $('#start');
         let errorMessage = $('#error');
-        let seconds = 0;
-        let minutes = 0;
-        let hours = 0;
-        let time;
+        let viewer =  $('#viewer');
         let isFirstClick = true;
+        let flagsCount;
+        let timeViewer = new Timer();
 
-        renderField(DEFAULT_FIELD_SIZE);
+        renderField(DEFAULT_FIELD_SIZE, field);
 
+        /*Set listeners*/
         bombsCountHolder.on("input", function () {
             let currentBombsCount = +bombsCountHolder.val();
             if (currentBombsCount >= MIN_BOMBS_COUNT && currentBombsCount < MAX_BOMBS_COUNT) {
@@ -91,14 +65,16 @@ $(function () {
             event.preventDefault();
             reloadGame();
             startGame();
-            result.text(GAME_IN_PROCESS);
+            result.text(GAME_IN_PROCESS + ` Flags remaining - ${flagsCount}`);
         });
 
+        /*Game functions*/
         function startGame() {
-            timer();
+            timeViewer.start();
             let bombsCount = +bombsCountHolder.val();
+            flagsCount = bombsCount;
             let size = calculateFiledSize(bombsCount);
-            renderField(size);
+            renderField(size, field);
 
             let cells = $("td");
 
@@ -111,7 +87,8 @@ $(function () {
                     isFirstClick = false;
                     this.removeAttribute("id");
                 }
-                clickCell(this, tableRows, size, bombsCount)
+
+                clickCell(this, tableRows, size, bombsCount);
             });
 
             cells.contextmenu(function (event) {
@@ -121,20 +98,55 @@ $(function () {
                 if (!isFirstClick) {
                     let image = this.getElementsByTagName("img")[0];
                     if (image) {
-                        showBombIdentifier(this);
                         image.remove();
-                    } else if (!this.classList.contains("open")) {
+                        flagsCount++;
+                        result.text(GAME_IN_PROCESS + ` Flags remaining - ${flagsCount}`)
+                    } else if (!this.classList.contains("open") && flagsCount !== 0) {
                         let svg = document.createElement("img");
                         svg.src = FLAG_SVG_PATH;
                         this.appendChild(svg);
                         this.classList.add("flag");
-                        hideBombIdentifier(this);
+                        flagsCount--;
+                        result.text(GAME_IN_PROCESS + ` Flags remaining - ${flagsCount}`)
                     }
                 }
             })
         }
 
-        function renderField(size) {
+        function clickCell(object, tableRows, size, bombsCount) {
+            if ($(object).data(BOOM_IDENTIFIER) === true) {
+                finishGame(GAME_OVER_FAIL + getRemainingBombs(tableRows, size, bombsCount));
+            } else {
+                object.setAttribute("id", "selected");
+                object.classList.add("open");
+                removeFlag(object);
+                showBombIdentifier(object);
+                let xCoordinate;
+                let yCoordinate;
+                for (let xIndex = 0; xIndex < size; xIndex++) {
+                    for (let yIndex = 0; yIndex < size; yIndex++) {
+                        if (tableRows.eq(xIndex).children().eq(yIndex).prop("id") === "selected") {
+                            xCoordinate = xIndex;
+                            yCoordinate = yIndex;
+                            break;
+                        }
+                    }
+                }
+
+                if (object.innerHTML === "") {
+                    openOtherCells(xCoordinate, yCoordinate, tableRows, size);
+                }
+
+                object.removeAttribute("id");
+            }
+
+            if (isGameFinished(tableRows, size, bombsCount)) {
+                finishGame(GAME_OVER_SUCCESS);
+            }
+
+        }
+
+        function renderField(size, field) {
             for (let rowsIndex = 1; rowsIndex <= size; rowsIndex++) {
                 let tr = $("<tr>");
                 tr.appendTo(field);
@@ -144,28 +156,6 @@ $(function () {
                     td.appendTo(currentTableRow);
                 }
             }
-        }
-
-        function countTime() {
-            seconds++;
-            if (seconds >= 60) {
-                seconds = 0;
-                minutes++;
-                if (minutes >= 60) {
-                    minutes = 0;
-                    hours++;
-                }
-            }
-
-            let value = (hours ? (hours > 9 ? hours : "0" + hours) : "00")
-                + ":" + (minutes ? (minutes > 9 ? minutes : "0" + minutes) : "00")
-                + ":" + (seconds > 9 ? seconds : "0" + seconds);
-            viewer.text(value);
-            timer();
-        }
-
-        function timer() {
-            time = setTimeout(countTime, 1000);
         }
 
         function setBombs(tableRows, bombsCount, size) {
@@ -179,11 +169,21 @@ $(function () {
             let yCoordinate = getRandomInt(size);
 
             let currentCell = tableRows.eq(xCoordinate).children().eq(yCoordinate);
-            if (currentCell.hasClass(BOMB_IDENTIFIER) || currentCell.prop("id") === FIRST_CLICK_FLAG) {
+            if (currentCell.data(BOOM_IDENTIFIER) === true || currentCell.prop("id") === FIRST_CLICK_FLAG) {
                 setBomb(size, tableRows);
             } else {
-                tableRows.eq(xCoordinate).children().eq(yCoordinate).attr("class", BOMB_IDENTIFIER)
+                tableRows.eq(xCoordinate).children().eq(yCoordinate).data(BOOM_IDENTIFIER, true)
             }
+        }
+
+        function getRandomInt(max) {
+            let number = Math.floor(Math.random() * Math.floor(max));
+
+            if (number === max) {
+                return getRandomInt(max);
+            }
+
+            return number;
         }
 
         function setBombsIdentifiers(tableRows, size) {
@@ -194,54 +194,19 @@ $(function () {
                     for (let checkXIndex = xCoordinateIndex - 1; checkXIndex <= xCoordinateIndex + 1; checkXIndex++) {
                         for (let checkYIndex = yCoordinateIndex - 1; checkYIndex <= yCoordinateIndex + 1; checkYIndex++) {
                             if (checkXIndex >= 0 && checkXIndex < size && checkYIndex >= 0 && checkYIndex < size) {
-                                if (tableRows.eq(checkXIndex).children().eq(checkYIndex).hasClass(BOMB_IDENTIFIER)) {
+                                if (tableRows.eq(checkXIndex).children().eq(checkYIndex).data(BOOM_IDENTIFIER) === true) {
                                     bombCounter++;
                                 }
                             }
                         }
                     }
                     if (bombCounter !== 0) {
-                        if (!tableRows.eq(xCoordinateIndex).children().eq(yCoordinateIndex).hasClass(BOMB_IDENTIFIER)) {
-                            let span = "<span>" + bombCounter + "</span>";
-                            tableRows.eq(xCoordinateIndex).children().eq(yCoordinateIndex).append(span);
+                        if (tableRows.eq(xCoordinateIndex).children().eq(yCoordinateIndex).data(BOOM_IDENTIFIER) !== true) {
+                            tableRows.eq(xCoordinateIndex).children().eq(yCoordinateIndex).data(BOMB_COUNTER, bombCounter);
                         }
                     }
                 }
             }
-        }
-
-        function clickCell(object, tableRows, size, bombsCount) {
-            if (object.classList[0] === BOMB_IDENTIFIER) {
-                finishGame(GAME_OVER_FAIL + getRemainingBombs(tableRows, size, bombsCount));
-            } else {
-                object.setAttribute("id", "selected");
-                object.classList.add("open");
-
-                removeFlag(object);
-
-                let xCoordinate;
-                let yCoordinate;
-                for (let xIndex = 0; xIndex < size; xIndex++) {
-                    for (let yIndex = 0; yIndex < size; yIndex++) {
-                        if (tableRows.eq(xIndex).children().eq(yIndex).prop("id") === "selected") {
-                            xCoordinate = xIndex;
-                            yCoordinate = yIndex;
-                            break;
-                        }
-                    }
-                }
-
-                if (+object.innerHTML < 2 || object.innerHTML === "") {
-                    openOtherCells(xCoordinate, yCoordinate, tableRows, size);
-                }
-
-                object.removeAttribute("id");
-            }
-
-            if (isGameFinished(tableRows, size, bombsCount)) {
-                finishGame(GAME_OVER_SUCCESS);
-            }
-
         }
 
         function getRemainingBombs(tableRows, size, bombsCount) {
@@ -249,7 +214,7 @@ $(function () {
             for (let xIndex = 0; xIndex < size; xIndex++) {
                 for (let yIndex = 0; yIndex < size; yIndex++) {
                     let currentCell = tableRows.eq(xIndex).children().eq(yIndex);
-                    if (currentCell.hasClass(BOMB_IDENTIFIER) && currentCell.hasClass(BOMB_FLAGGED)) {
+                    if (currentCell.data(BOOM_IDENTIFIER) === true && currentCell.hasClass(BOMB_FLAGGED)) {
                         currentCount++;
                     }
                 }
@@ -260,19 +225,20 @@ $(function () {
         function openOtherCells(xCoordinate, yCoordinate, tableRows, size) {
             for (let checkXIndex = xCoordinate - 1; checkXIndex <= xCoordinate + 1; checkXIndex++) {
                 for (let checkYIndex = yCoordinate - 1; checkYIndex <= yCoordinate + 1; checkYIndex++) {
-                    if (checkXIndex > 0 && checkXIndex < size && checkYIndex > 0 && checkYIndex < size) {
+                    if (checkXIndex >= 0 && checkXIndex < size && checkYIndex >= 0 && checkYIndex < size) {
                         let currentCell = tableRows.eq(checkXIndex).children().eq(checkYIndex);
-                        if (!currentCell.hasClass(BOMB_IDENTIFIER) && !currentCell.hasClass(CELL_OPEN)) {
-                            if (+currentCell.children().eq(0).text() < 2) {
+                        if (currentCell.data(BOOM_IDENTIFIER) !== true
+                            && !currentCell.hasClass(CELL_OPEN)
+                            && !currentCell.hasClass(BOMB_FLAGGED)) {
+                            if (!currentCell.data(BOMB_COUNTER)) {
                                 currentCell.attr("class", CELL_OPEN);
-                                removeFlag(currentCell[0]);
+                                currentCell.text(currentCell.data(BOMB_COUNTER));
+                                removeFlag(currentCell);
                                 openOtherCells(checkXIndex, checkYIndex, tableRows, size);
-                                break;
-                            } else {
-                                if (+currentCell.children().eq(0).text() === 2) {
-                                    currentCell.attr("class", CELL_OPEN);
-                                    removeFlag(currentCell[0]);
-                                }
+                            } else if (currentCell.data(BOMB_COUNTER) < 3) {
+                                currentCell.attr("class", CELL_OPEN);
+                                currentCell.text(currentCell.data(BOMB_COUNTER));
+                                removeFlag(currentCell);
                             }
                         }
                     }
@@ -293,11 +259,16 @@ $(function () {
         }
 
         function finishGame(message) {
-            $(".bomb").attr("class", BOOM_IDENTIFIER);
-            clearTimeout(time);
+            let cells = $("td");
+            for (let index = 0; index < cells.length; index++) {
+                let currentCell = cells.eq(index);
+                if (currentCell.data(BOOM_IDENTIFIER) === true) {
+                    currentCell.attr("class", BOOM_IDENTIFIER);
+                }
+            }
+            timeViewer.reset();
             result.text(message);
 
-            let cells = $("td");
             cells.unbind("click");
             cells.unbind("contextmenu");
             cells.contextmenu(function (event) {
@@ -308,38 +279,41 @@ $(function () {
 
         function reloadGame() {
             field.text("");
-            clearTimeout(time);
-            reloadTime();
+            timeViewer.reset();
             result.text("");
             isFirstClick = true;
-        }
-
-        function reloadTime() {
-            viewer.text("");
-            seconds = 0;
-            minutes = 0;
-            hours = 0;
+            flagsCount = 0;
         }
 
         function showBombIdentifier(object) {
-            let span = object.getElementsByTagName("span")[0];
-            if (span) {
-                span.classList.remove(HIDE_IDENTIFIER);
-            }
-        }
-
-        function hideBombIdentifier(object) {
-            let span = object.getElementsByTagName("span")[0];
-            if (span) {
-                span.classList.add(HIDE_IDENTIFIER);
+            if ($(object).data(BOMB_COUNTER)) {
+                $(object).text($(object).data(BOMB_COUNTER));
             }
         }
 
         function removeFlag(object) {
-            let image = object.getElementsByTagName("img")[0];
-            if (image) {
+            let image = $(object).children().eq(0);
+            if (image.is("img")) {
                 image.remove();
-                showBombIdentifier(object);
+                flagsCount++;
+                result.text(GAME_IN_PROCESS + ` Flags remaining - ${flagsCount}`);
+            }
+        }
+
+        /*Utils functions*/
+        function calculateFiledSize(bombsCount) {
+            if (bombsCount === DEFAULT_BOMBS_COUNT || bombsCount < DEFAULT_BOMBS_COUNT) {
+                return DEFAULT_FIELD_SIZE;
+            }
+
+            let index = Math.round(bombsCount / 10) * 10;
+
+            if (index === DEFAULT_BOMBS_COUNT) {
+                return DEFAULT_FIELD_SIZE;
+            } else {
+                index = index / DEFAULT_BOMBS_COUNT;
+
+                return DEFAULT_FIELD_SIZE + index + FIELD_INDEX;
             }
         }
     }
